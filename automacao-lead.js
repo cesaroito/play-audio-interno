@@ -1,5 +1,5 @@
 /**
- * LEADS AUTOMATION v5.3 — STABLE & CONSOLIDATED
+ * LEADS AUTOMATION v5.4 — STABLE & CONSOLIDATED
  * Correções: CFG restaurado, funções de zebra reimplementadas, duplicatas removidas.
  */
 
@@ -319,7 +319,9 @@ function onEditInstallable(e) {
     const statusKey = normalizeStatusKey_(statusNow);
     const oldStatusKey =
       editedCol === CFG.COL_STATUS_USER
-        ? normalizeStatusKey_(typeof e.oldValue !== "undefined" ? e.oldValue : "")
+        ? normalizeStatusKey_(
+            typeof e.oldValue !== "undefined" ? e.oldValue : "",
+          )
         : "";
     const isManualStatusTransition =
       editedCol === CFG.COL_STATUS_USER && oldStatusKey !== statusKey;
@@ -327,7 +329,8 @@ function onEditInstallable(e) {
     const shouldMarkStatusUpdate =
       editedCol === CFG.COL_STATUS_USER ||
       (statusKey === "novo" &&
-        (requiredKeys.includes(editedCol) || editedCol === CFG.COL_STATUS_USER));
+        (requiredKeys.includes(editedCol) ||
+          editedCol === CFG.COL_STATUS_USER));
 
     if (shouldMarkStatusUpdate) {
       markStatusUpdated_(row);
@@ -639,7 +642,8 @@ function getApprovalWebhookKey_(row, payload) {
   const proposalKey = String(payload?.[CFG.COL_PROPOSAL_KEY] || "").trim();
 
   if (code) return `${APPROVAL_WEBHOOK_PROP_PREFIX}:${code}:${version}`;
-  if (proposalKey) return `${APPROVAL_WEBHOOK_PROP_PREFIX}:${proposalKey}:${version}`;
+  if (proposalKey)
+    return `${APPROVAL_WEBHOOK_PROP_PREFIX}:${proposalKey}:${version}`;
   return `${APPROVAL_WEBHOOK_PROP_PREFIX}:row:${row}:${version}`;
 }
 
@@ -740,7 +744,9 @@ function acquireRowLock_(row, updatedAtMs) {
   const colUntil = h[CFG.COL_LOCK_UNTIL];
   const colLastProcessed = h[CFG.COL_STATUS_LAST_PROCESSED];
   const now = Date.now();
-  const until = colUntil ? Number(sh.getRange(row, colUntil).getValue() || 0) : 0;
+  const until = colUntil
+    ? Number(sh.getRange(row, colUntil).getValue() || 0)
+    : 0;
   const lastProcessedMs = colLastProcessed
     ? parseDateValueMs_(sh.getRange(row, colLastProcessed).getValue())
     : 0;
@@ -907,7 +913,9 @@ function processPendingNovoRows() {
       const runId = Utilities.getUuid();
       payload.__run_uuid = runId;
 
-      console.log(`[NOVO/PENDENTE] ENVIANDO linha ${row}: ID=${payload.codigo_prop}`);
+      console.log(
+        `[NOVO/PENDENTE] ENVIANDO linha ${row}: ID=${payload.codigo_prop}`,
+      );
       const sendResult = postToN8N_(payload, N8N.WEBHOOK_NOVA_PROPOSTA);
 
       if (sendResult.ok) {
@@ -1342,6 +1350,20 @@ function applyProtectionsAndHiding_() {
       }
     } catch (_) {}
   });
+
+  // Proteção da linha de cabeçalho (row 1) — somente owner + SYSTEM_ADMINS podem renomear colunas
+  try {
+    const lastCol = sh.getMaxColumns();
+    const headerRange = sh.getRange(1, 1, 1, lastCol);
+    const pHeader = headerRange
+      .protect()
+      .setDescription("[Sistema] header_row");
+    pHeader.setWarningOnly(false);
+    if (pHeader.canDomainEdit()) pHeader.setDomainEdit(false);
+    const hEditors = pHeader.getEditors();
+    if (hEditors && hEditors.length) pHeader.removeEditors(hEditors);
+    if (allowedEditors.length) pHeader.addEditors(allowedEditors);
+  } catch (_) {}
 
   // Proteção da coluna proposta_aprovada (apenas editores autorizados)
   try {
