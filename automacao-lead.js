@@ -1,5 +1,5 @@
 /**
- * LEADS AUTOMATION v5.4 — STABLE & CONSOLIDATED
+ * LEADS AUTOMATION v5.5 — STABLE & CONSOLIDATED
  * Correções: CFG restaurado, funções de zebra reimplementadas, duplicatas removidas.
  */
 
@@ -752,9 +752,9 @@ function acquireRowLock_(row, updatedAtMs) {
     : 0;
 
   if (until && now < until) {
-    const rowChangedAfterLastSend =
-      updatedAtMs && (!lastProcessedMs || updatedAtMs > lastProcessedMs);
-    if (!rowChangedAfterLastSend) return false;
+    // Lock ativo: bloqueia incondicionalmente para evitar disparos duplos
+    // durante o processamento do N8N (que pode levar até 30s).
+    return false;
   }
 
   if (colOwner) {
@@ -892,6 +892,13 @@ function processPendingNovoRows() {
       const lastProcessedMs = parseDateValueMs_(
         payload[CFG.COL_STATUS_LAST_PROCESSED],
       );
+
+      // Cooldown absoluto: não re-envia se o webhook já foi enviado nos últimos 10 minutos,
+      // independente de edições na linha. Evita disparos duplos durante processamento do N8N.
+      const COOLDOWN_MS = 10 * 60 * 1000;
+      if (lastProcessedMs && Date.now() - lastProcessedMs < COOLDOWN_MS) {
+        continue;
+      }
 
       if (lastProcessedMs && (!updatedAtMs || updatedAtMs <= lastProcessedMs)) {
         continue;
