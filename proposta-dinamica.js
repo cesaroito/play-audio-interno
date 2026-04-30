@@ -200,12 +200,33 @@ function executeSanitization(body) {
     const doc = DocumentApp.openById(docId);
     const bodySection = doc.getBody();
 
-    // Regex para valores monetários (R$ ou numéricos soltos comuns em tabelas de preço)
-    // Captura: R$ opcional, espaço opcional, números com ponto e vírgula
-    const pattern = "(\\s?R\\$\\s?)?(\\d{1,3}(\\.\\d{3})*|\\d+),\\d{2}";
+    // Passo 1: substitui valores com prefixo R$ explícito em qualquer parte do documento.
+    // R$ nunca aparece em medidas técnicas, então esta substituição é segura globalmente.
+    bodySection.replaceText("R\\$\\s?[\\d.]+,\\d{2}", "[--]");
 
-    // Substitui tudo por [--]
-    bodySection.replaceText(pattern, "[--]");
+    // Passo 2: percorre tabelas e substitui valores numéricos SOMENTE na última coluna
+    // (coluna de preço "Valor R$"). Colunas de descrição com medidas técnicas não são tocadas.
+    const numChildren = bodySection.getNumChildren();
+    for (let i = 0; i < numChildren; i++) {
+      const el = bodySection.getChild(i);
+      if (el.getType() !== DocumentApp.ElementType.TABLE) continue;
+
+      const table = el.asTable();
+      for (let r = 0; r < table.getNumRows(); r++) {
+        const row = table.getRow(r);
+        const nCols = row.getNumCells();
+        if (nCols < 2) continue; // linhas com 1 coluna são títulos/seções, ignorar
+
+        const priceCell = row.getCell(nCols - 1);
+        const cellText = priceCell.getText().trim();
+
+        // Pula cabeçalhos da coluna de preço (ex: "Valor R$", "Valor", "R$")
+        if (/^(valor(\s+r\$?)?|r\$)$/i.test(cellText)) continue;
+
+        // Substitui valores numéricos monetários na célula de preço
+        priceCell.replaceText("[\\d.]+,\\d{2}", "[--]");
+      }
+    }
 
     doc.saveAndClose();
     return respond({ ok: true, status: "sanitized", docId: docId });
