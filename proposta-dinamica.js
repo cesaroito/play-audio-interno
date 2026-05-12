@@ -200,12 +200,14 @@ function executeSanitization(body) {
     const doc = DocumentApp.openById(docId);
     const bodySection = doc.getBody();
 
-    // Passo 1: substitui valores com prefixo R$ explícito em qualquer parte do documento.
-    // R$ nunca aparece em medidas técnicas, então esta substituição é segura globalmente.
-    bodySection.replaceText("R\\$\\s?[\\d.]+,\\d{2}", "[--]");
+    // Passo 1: substitui "R$ xxx,xx" em qualquer parte do documento.
+    // ([A-Za-zÀ-ÿ]+\s)? captura opcionalmente uma palavra antes do R$ (ex: "Valor R$ 10.000,00")
+    // \s* (em vez de \s?) lida com múltiplos espaços ou espaço não-separável após R$
+    bodySection.replaceText("([A-Za-zÀ-ÿ]+\\s)?R\\$\\s*[\\d.]+,\\d{2}", "[--]");
 
     // Passo 2: percorre tabelas e substitui valores numéricos SOMENTE na última coluna
     // (coluna de preço "Valor R$"). Colunas de descrição com medidas técnicas não são tocadas.
+    // (R\$\s*)? captura R$ residual caso o Passo 1 tenha falhado (ex: espaço extra no doc)
     const numChildren = bodySection.getNumChildren();
     for (let i = 0; i < numChildren; i++) {
       const el = bodySection.getChild(i);
@@ -223,8 +225,8 @@ function executeSanitization(body) {
         // Pula cabeçalhos da coluna de preço (ex: "Valor R$", "Valor", "R$")
         if (/^(valor(\s+r\$?)?|r\$)$/i.test(cellText)) continue;
 
-        // Substitui valores numéricos monetários na célula de preço
-        priceCell.replaceText("[\\d.]+,\\d{2}", "[--]");
+        // Substitui R$ + número ou apenas número na célula de preço
+        priceCell.replaceText("(R\\$\\s*)?[\\d.]+,\\d{2}", "[--]");
       }
     }
 
